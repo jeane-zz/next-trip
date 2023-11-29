@@ -1,0 +1,155 @@
+---
+title: "细粒度更新-70行实现useEffect"
+date: "2023-11-28"
+tags: ['markdown', 'code', 'features']
+draft: false
+summary: Example of a markdown file with code blocks and syntax highlighting
+---
+
+《React设计原理》第一章，前端框架使用的技术之一：`细粒度更新`。
+## 细粒度更新
+在vue和mobx中，自动依赖追踪技术，即`细粒度更新`（Fine-Grained Reactivity）。这也是很多前端框架实现 `自变量变化到UI变化` 的底层实现。
+
+## 细粒度更新简单实现
+
+简单实现中包含 useState、 useEffect、 useMemo 三个hook的实现。
+与React原生实现不同，三个hook使用时，都不需要提供依赖数组，且useState的第一个返回值为函数。
+
+具体来说一下各个hook的实现。
+
+### useState
+useState 接收一个初始值，返回一个数组，数组中包含getter和setter。
+
+useState中主要包含三个部分：
+1. listener：监听者列表，主要保存依赖该state的effect（或包装后的effect，如memo）。
+2. getter：返回state的值，返回之前完成监听和依赖的关系建立。
+   1. 监听关系：将当前effect添加到listener中。
+   2. 依赖关系：将当前state添加到当前effect的依赖列表中。
+   3. 当前effect即为全局effect调用栈中的最后一个effect（栈顶元素）。
+3. setter：更新state的值，遍历listener，执行effect的回调函数。
+
+### useEffect
+useEffect 接收一个回调函数，在组件渲染时或者依赖发生变化时执行。
+
+useEffect中主要包含四个部分：
+1. 全局effect调用栈：按需保存effect，用于全局获取effect（state也可以获取effect）。
+   1. effect执行函数执行，effect入栈。(注意，当前effect位于effect调用栈的栈顶)。
+   2. 执行回调函数。
+   3. 回调函数执行完成，effect出栈。
+2. effect：当前effect对象，包含effect的执行函数和依赖列表deps。
+3. 执行函数：既是useEffect的执行函数，也是effect对象的执行函数。主要用于执行回调函数，并收集依赖。
+4. 回调函数：useEffect的参数，在useEffect的执行函数中被触发运行。回调函数会读取state（调用getter）或设置state（调用setter）。
+      1. 调用getter， 建立或重新建立监听和依赖的关系。
+      2. 调用setter， 触发后续的监听函数执行。
+
+
+
+具体代码如下。
+
+```js
+
+// 保存effect调用栈
+const effectStack = [];
+
+// 做两件事情，移除监听，移除依赖
+function cleanup (effect) {
+    // 从该effect订阅的所有state 监听中移除该effect
+    for(const listener of effect.deps) {
+        listener.delete(effect);
+    }
+
+    // 将该effect的deps置空
+    effect.deps.clear();
+}
+
+function subscribe (effect, listener) {
+    effect.deps.add(listener);
+    listener.add(effect);
+}
+
+function useState (value) {
+
+    const listener = new Set(); // 监听者
+
+    const get = () => {
+        // 收集监听，建立订阅发布关系
+        const effect = effectStack[effectStack.length - 1];
+        if (effect) {
+            subscribe(effect, listener);
+        }
+        return value;
+    }
+    const set = (newValue) => {
+        value = newValue;
+        // 通知监听者，执行回调函数
+        for(const effect of [...listener]) {
+            effect.execute();
+        }
+    }
+    return [get, set];
+}
+
+function useEffect (callback) {
+    const execute = () => {
+        // 重置依赖
+        cleanup(effect);
+
+        // 当前effect入栈
+        effectStack.push(effect);
+        // 执行回调
+        try{
+            callback();
+        } finally {
+            // 出栈
+            effectStack.pop();
+        }
+    }
+    const effect = {
+        execute,
+        deps: new Set(),
+    }
+
+    // 执行,建立发布订阅关系
+    execute();
+}
+
+function useMemo (callback) {
+    const [get, set] = useState();
+
+    useEffect(() => {
+        set(callback());
+    });
+    return get;
+}
+```
+
+测试用例如下：
+
+```js
+// 测试用例-useState
+const [count, setCount] = useState(0);
+console.log('init ', count())
+setCount(1);
+console.log('after set: ', count())
+
+// 测试用例-useEffect
+useEffect(() => {
+    console.log('自动执行 effet count: ', count());
+})
+
+const [name1, setName1] = useState('Li');
+const [name2, setName2] = useState('Han');
+const [showAll, triggerShowAll] = useState(true);
+
+// 测试用例-useMemo
+const whoIsHere = useMemo(() => {
+    if (showAll()) {
+        return name1() + ' & ' + name2() + ' is here';
+    }
+    return name1() +  ' is here';
+})
+
+useEffect(() => {
+    console.log('guess who is here \n', whoIsHere());
+})
+```
