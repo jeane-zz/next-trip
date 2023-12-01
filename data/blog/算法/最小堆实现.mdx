@@ -1,0 +1,105 @@
+---
+title: "最小堆实现"
+date: "2023-12-1"
+tags: ['leetcode', '数据结构', '堆']
+draft: false
+summary: 从一道LeetCode题目学习一种数据结构。
+---
+
+[leetcode 丑数II](https://leetcode.cn/problems/ugly-number-ii/)
+
+[hello-algo 堆](https://www.hello-algo.com/chapter_heap/)
+
+
+堆 ，可以看作是一个完全二叉树，需要满足父子节点之间的数量关系。
+「大顶堆 max heap」：任意节点的值 >= 其子节点的值。
+「小顶堆 min heap」：任意节点的值 <= 其子节点的值。
+
+丑数II 需要获取最小的前n个丑数，考虑用最小堆，每次都拿到最小的一个丑数。
+
+用到的堆操作有：
+构建堆，构建完之后顶部就是最小值
+插入元素， 每次插入元素 都需要重新构建堆
+
+
+最小堆的实现：
+
+```js
+
+class MinHeap {
+    constructor() {
+        this.heap = [];
+    }
+
+    getParentIndex(i) {
+        return (i - 1) >> 1; // 右移：将一个操作数的二进制表示形式向右移动指定位数  9 >> 2 得到2  9二进制1001 右移2位，得到10（2的二进制）
+        // 获取父节点index 可以用 (i - 1) / 2 向下取整
+    }
+
+    getLeftIndex(i) {
+        return i * 2 + 1;
+    }
+
+    getRightIndex(i) {
+        return i * 2 + 2;
+    }
+
+    swap(i1, i2) {
+        const temp = this.heap[i1];
+        this.heap[i1]= this.heap[i2];
+        this.heap[i2] = temp;
+    }
+
+    // 将最小的元素 从底层一层层调到上层
+    shiftUp(index) {
+        if(index === 0) { return; }
+        const parentIndex = this.getParentIndex(index);
+        // 如果当前位置父级较大，则交互位置。 父级的位置在堆的下面
+        if(this.heap[parentIndex] > this.heap[index]){
+            this.swap(parentIndex, index); // 小的元素向上，大的元素向下
+            this.shiftUp(parentIndex); // 交换过程 需比较到最下层
+        }
+    }
+
+    // 删除堆顶元素后，重新建堆
+    shiftDown(index) {
+        const leftIndex = this.getLeftIndex(index);
+        const rightIndex = this.getRightIndex(index);
+
+        if (this.heap[leftIndex] < this.heap[index]) {
+            this.swap(leftIndex, index);
+            this.shiftDown(leftIndex);
+        }
+        if (this.heap[rightIndex] < this.heap[index]) {
+            this.swap(rightIndex, index);
+            this.shiftDown(rightIndex);
+        }
+    }
+
+    // 新元素 添加到当前树的叶子节点，然后开始比较，直至最小值不断与父级交互至顶端
+    insert(value) {
+        this.heap.push(value);
+        this.shiftUp(this.heap.length - 1);
+    }
+
+    pop () {
+        // 将最大的叶子节点 交换至顶部，然后开始重新为堆内元素排序，
+        this.heap[0] = this.heap.pop();
+        this.shiftDown(0);
+        return this.heap[0];
+    }
+
+    // 栈顶元素
+    peek() {
+        return this.heap[0];
+    }
+
+    size() {
+        return this.heap.length;
+    }
+
+}
+
+
+
+```
